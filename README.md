@@ -1,2 +1,3 @@
 # flock
-Mean field reinforcement learning (MFRL) games.
+Mean field reinforcement learning (MFRL) for collaborative games.
+
