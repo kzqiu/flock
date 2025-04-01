@@ -8,7 +8,8 @@ setup(
         "numpy",
         "gym>=0.17.0",
         "pygame>=2.0.0",
-        "stable_baselines3",
+        "stable-baselines3[extra]",
+        "torch"
     ],
     author="Anupam Bhakta, Kevin Qiu",
     author_email="ab5494@columbia.edu, kzq2000@columbia.edu",
