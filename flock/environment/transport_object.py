@@ -9,7 +9,7 @@ class TransportObject:
         self.width = width
         self.height = height
         self.color = (0, 0, 255)  # blue
-        self.mass = 500.0  # heavier than agents
+        self.mass = 250.0  # heavier than agents
         self.restitution = 0.3  # reduced bounciness for stability
         self.max_speed = 100.0  # reduced maximum speed to prevent glitching
         self.teleport_threshold = 50.0  # used to detect teleporting
@@ -17,13 +17,20 @@ class TransportObject:
         # for continuous collision detection
         self.swept_collision_buffer = 2.0  # extra buffer for swept collision detection
         
-    def apply_force(self, force):
-        """Apply a force to the transport object"""
+    def apply_force(self, force, source=None):
+        """
+        Apply a force to the transport object
+        
+        Args:
+            force: The force vector
+            source: Optional source of the force (e.g. an agent)
+        """
         # limit the maximum force that can be applied at once
         force_magnitude = np.linalg.norm(force)
         if force_magnitude > 200:
             force = (force / force_magnitude) * 200
             
+        # F = ma, so a = F/m
         acceleration = force / self.mass
         self.velocity += acceleration
         
@@ -31,6 +38,18 @@ class TransportObject:
         speed = np.linalg.norm(self.velocity)
         if speed > self.max_speed:
             self.velocity = (self.velocity / speed) * self.max_speed
+            
+    def apply_directed_force(self, force, source):
+        """
+        Apply a directed force from a specific source
+        
+        Args:
+            force: The force vector
+            source: The agent applying the force
+        """
+        # for transport object, this works like a regular force
+        # but could be extended for special behaviors
+        self.apply_force(force)
     
     def update(self, dt, width, height):
         """Update the object's position based on its velocity"""
@@ -75,7 +94,7 @@ class TransportObject:
         movement = np.linalg.norm(self.position - self.last_position)
         if movement > self.teleport_threshold:
             # if teleporting detected, revert to last position and stop
-            print(f"Teleport detected! Movement: {movement:.2f}")
+            print(f"teleport detected! movement: {movement:.2f}")
             self.position = self.last_position
             self.velocity = np.array([0.0, 0.0])
         

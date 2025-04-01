@@ -1,23 +1,40 @@
+import gym
 import numpy as np
-from environment.environment import Environment
-from environment.agent import Agent
+from environment.flock_env import FlockEnv
 
-def main():
-    # create environment
-    env = Environment(width=800, height=600)
+def random_policy():
+    """Run using random actions"""
+    # create the environment
+    env = FlockEnv(num_agents=50, num_obstacles=15)
     
-    # create agents in a circle around the transport object
-    num_agents = 30
-    for i in range(num_agents):
-        angle = i * (2 * np.pi / num_agents)
-        # position around the transport object
-        x = env.width/2 + np.cos(angle) * 100
-        y = env.height/2 + np.sin(angle) * 100
-        agent = Agent(position=(x, y))
-        env.add_agent(agent)
+    # reset the environment to get initial observation
+    observation = env.reset()
     
-    # run the simulation
-    env.run()
+    done = False
+    total_reward = 0
+    
+    while not done:
+        # sample random actions for all agents
+        actions = np.random.uniform(-1, 1, size=(env.num_agents, 2))
+        
+        observation, reward, done, info = env.step(actions)
+        
+        total_reward += reward
+        
+        env.render()
+        
+        # check if user requested exit
+        if hasattr(env, 'user_exit') and env.user_exit:
+            print("User requested exit. Stopping simulation.")
+            break
+            
+        print(f"Step: {env.current_step}, Reward: {reward:.2f}, "
+              f"Distance: {info['distance_to_target']:.2f}")
+    
+    print(f"Episode done. Total reward: {total_reward:.2f}")
+    print(f"Success: {info['success']}")
+    
+    env.close()
 
 if __name__ == "__main__":
-    main()
+    random_policy()
