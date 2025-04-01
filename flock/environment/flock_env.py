@@ -1,3 +1,6 @@
+import os
+import base64
+from IPython import display
 import numpy as np
 import pygame
 import gym
@@ -475,3 +478,32 @@ class FlockEnv(gym.Env):
         for i, text in enumerate(info_text):
             text_surface = font.render(text, True, (0, 0, 0))
             self.screen.blit(text_surface, (10, 10 + i * 20))
+
+    def _init_pygame_headless(self):
+        """Initialize Pygame in headless mode for Google Colab"""
+        os.environ["SDL_VIDEODRIVER"] = "dummy"
+        pygame.init()
+        self.screen = pygame.Surface((self.width, self.height))
+        self.isopen = True
+
+    def render_for_colab(self, mode="rgb_array"):
+        """Render and display an image in Google Colab"""
+        if not pygame.get_init():
+            self._init_pygame_headless()
+
+        img = self.render(mode="rgb_array")
+        if img is not None:
+            from PIL import Image
+
+            img = Image.fromarray(img)
+
+            img_path = "/tmp/flock_render.png"
+            img.save(img_path)
+
+            with open(img_path, "rb") as f:
+                image_data = f.read()
+            image = base64.b64encode(image_data).decode("utf-8")
+            display.display(display.HTML(f'<img src="data:image/png;base64,{image}"/>'))
+
+            return img
+        return None

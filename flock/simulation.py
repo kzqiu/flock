@@ -1,11 +1,8 @@
-import gym
 import numpy as np
 from environment.flock_env import FlockEnv
 
 
-def random_policy():
-    """Run using random actions"""
-    # create the environment
+def main():
     env = FlockEnv(num_agents=50, num_obstacles=15)
 
     # reset the environment to get initial observation
@@ -41,4 +38,4 @@ def random_policy():
 
 
 if __name__ == "__main__":
-    random_policy()
+    main()
