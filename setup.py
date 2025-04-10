@@ -10,7 +10,8 @@ setup(
         "pygame>=2.0.0",
         "shimmy",
         "stable-baselines3[extra]",
-        "torch"
+        "torch",
+        "tqdm"
     ],
     author="Anupam Bhakta, Ben Fu, Kevin Qiu",
     author_email="ab5494@columbia.edu, bhf2117@columbia.edu, kzq2000@columbia.edu",
