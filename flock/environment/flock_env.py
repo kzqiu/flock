@@ -91,13 +91,13 @@ class FlockEnv(gym.Env):
         self.current_step = 0
         self.success = False
 
-        # create target location
-        self.target_pos = np.array([self.width * 0.75, self.height * 0.75])
-
-        # create transport object
+        # create transport object at center
         self.transport_object = TransportObject(
             position=np.array([self.width / 2, self.height / 2]), width=60, height=60
         )
+        
+        # generate random target location
+        self.target_pos = self._generate_random_target()
 
         # reset previous distance for reward calculation
         self.previous_distance = np.linalg.norm(
@@ -124,6 +124,48 @@ class FlockEnv(gym.Env):
         observation = self._get_observation()
 
         return observation
+
+    def _generate_random_target(self):
+        """
+        Generate a random target position that's valid (not too close to walls, 
+        transport object, or in a position that would make the task impossible).
+        
+        Returns:
+            target_pos: Random target position as numpy array
+        """
+        # parameters for target placement
+        margin = max(self.target_radius * 2, 50)  # min distance from walls
+        min_distance_from_center = 200  # min distance from starting position
+        
+        # generate random positions until a valid one is found
+        max_attempts = 50
+        attempt = 0
+        
+        while attempt < max_attempts:
+            x = np.random.uniform(margin, self.width - margin)
+            y = np.random.uniform(margin, self.height - margin)
+            candidate_pos = np.array([x, y])
+            
+            # check distance from center for transport object's starting position
+            dist_from_center = np.linalg.norm(
+                candidate_pos - np.array([self.width / 2, self.height / 2])
+            )
+            
+            # ensure target is not too close to starting position
+            if dist_from_center >= min_distance_from_center:
+                return candidate_pos
+                
+            attempt += 1
+        
+        # fallback to a default position if no valid random position is found
+        corners = [
+            [margin, margin],                        # Top-left
+            [self.width - margin, margin],           # Top-right
+            [margin, self.height - margin],          # Bottom-left
+            [self.width - margin, self.height - margin]  # Bottom-right
+        ]
+        
+        return np.array(corners[np.random.randint(0, 4)])
 
     def step(self, actions):
         """
@@ -360,8 +402,43 @@ class FlockEnv(gym.Env):
         # small time penalty to encourage efficiency
         time_penalty = -0.01
 
-        # combine rewards
-        total_reward = distance_reward + success_reward + time_penalty
+        # collaboration reward
+        collaboration_reward = 0.0
+        agents_near_object = 0
+        push_direction = self.target_pos - self.transport_object.position
+        if np.linalg.norm(push_direction) > 0:
+            push_direction = push_direction / np.linalg.norm(push_direction)
+            
+        pushing_agents = 0
+        effective_pushing = 0.0
+        
+        for agent in self.agents:
+            # check if agent is close to the object
+            distance_to_object = np.linalg.norm(agent.position - self.transport_object.position)
+            interaction_radius = self.transport_object.width/2 + agent.radius + 10
+            
+            if distance_to_object < interaction_radius:
+                agents_near_object += 1
+                
+                # check if agent is pushing in the right direction
+                if np.linalg.norm(agent.velocity) > 0.5:
+                    agent_direction = agent.velocity / np.linalg.norm(agent.velocity)
+                    pushing_alignment = np.dot(agent_direction, push_direction)
+                    
+                    if pushing_alignment > 0.7:  # agent pushing approximately toward target
+                        pushing_agents += 1
+                        effective_pushing += pushing_alignment
+
+        # reward based on how many agents are effectively pushing
+        if agents_near_object > 0:
+            pushing_ratio = pushing_agents / agents_near_object
+            collaboration_reward += pushing_ratio * 3.0
+            
+            # extra reward for effective collective force
+            collaboration_reward += effective_pushing * 0.5
+
+        # combine all rewards
+        total_reward = distance_reward + success_reward + time_penalty + collaboration_reward
 
         return total_reward
 
