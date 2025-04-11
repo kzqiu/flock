@@ -397,20 +397,39 @@ class FlockEnv(gym.Env):
         normalized_current = current_distance / diagonal_length
         normalized_previous = self.previous_distance / diagonal_length
         
-        # distance improvement reward (moving closer to target)
+        # detect if object has moved at all
+        object_velocity_magnitude = np.linalg.norm(self.transport_object.velocity)
+        object_movement_reward = min(0.2, object_velocity_magnitude * 0.05)  # small reward for any movement
+        
+        # distance improvement reward
         distance_improvement = normalized_previous - normalized_current
         
         # scale reward more as we get closer to the target
         closeness_factor = 1.0 + (1.0 / (normalized_current + 0.2))
-        distance_reward = distance_improvement * 15.0 * closeness_factor
+        distance_reward = distance_improvement * 10.0 * closeness_factor
         
-        # small continuous reward for being closer to target
-        proximity_reward = 0.2 * (1.0 - normalized_current)
+        # stronger continuous reward for being closer to target
+        proximity_reward = 0.5 * (1.0 - normalized_current)
+        
+        # reward for agents being near the object
+        agents_near_object = 0
+        engagement_reward = 0
+        for agent in self.agents:
+            dist_to_object = np.linalg.norm(agent.position - self.transport_object.position)
+            if dist_to_object < self.transport_object.width * 2:
+                agents_near_object += 1
+        
+        # scale reward based on how many agents are engaged with the object
+        if len(self.agents) > 0:
+            engagement_factor = agents_near_object / len(self.agents)
+            engagement_reward = 0.3 * engagement_factor
         
         success_reward = 100.0 if self.success else 0.0
-        time_penalty = -0.05
         
-        total_reward = distance_reward + proximity_reward + success_reward + time_penalty
+        # reduced time penalty to encourage longer exploration
+        time_penalty = -0.01
+        
+        total_reward = distance_reward + proximity_reward + success_reward + time_penalty + object_movement_reward + engagement_reward
         
         return total_reward
 
