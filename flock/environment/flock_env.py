@@ -392,54 +392,26 @@ class FlockEnv(gym.Env):
         Returns:
             reward: The computed reward value.
         """
-        # reward for moving closer to the target
-        distance_improvement = self.previous_distance - current_distance
-        distance_reward = distance_improvement * 10.0  # scale to make it meaningful
-
-        # success reward
-        success_reward = 100.0 if self.success else 0.0
-
-        # small time penalty to encourage efficiency
-        time_penalty = -0.01
-
-        # collaboration reward
-        collaboration_reward = 0.0
-        agents_near_object = 0
-        push_direction = self.target_pos - self.transport_object.position
-        if np.linalg.norm(push_direction) > 0:
-            push_direction = push_direction / np.linalg.norm(push_direction)
-            
-        pushing_agents = 0
-        effective_pushing = 0.0
+        # normalize distances by diagonal length of environment for better generalization
+        diagonal_length = np.sqrt(self.width**2 + self.height**2)
+        normalized_current = current_distance / diagonal_length
+        normalized_previous = self.previous_distance / diagonal_length
         
-        for agent in self.agents:
-            # check if agent is close to the object
-            distance_to_object = np.linalg.norm(agent.position - self.transport_object.position)
-            interaction_radius = self.transport_object.width/2 + agent.radius + 10
-            
-            if distance_to_object < interaction_radius:
-                agents_near_object += 1
-                
-                # check if agent is pushing in the right direction
-                if np.linalg.norm(agent.velocity) > 0.5:
-                    agent_direction = agent.velocity / np.linalg.norm(agent.velocity)
-                    pushing_alignment = np.dot(agent_direction, push_direction)
-                    
-                    if pushing_alignment > 0.7:  # agent pushing approximately toward target
-                        pushing_agents += 1
-                        effective_pushing += pushing_alignment
-
-        # reward based on how many agents are effectively pushing
-        if agents_near_object > 0:
-            pushing_ratio = pushing_agents / agents_near_object
-            collaboration_reward += pushing_ratio * 3.0
-            
-            # extra reward for effective collective force
-            collaboration_reward += effective_pushing * 0.5
-
-        # combine all rewards
-        total_reward = distance_reward + success_reward + time_penalty + collaboration_reward
-
+        # distance improvement reward (moving closer to target)
+        distance_improvement = normalized_previous - normalized_current
+        
+        # scale reward more as we get closer to the target
+        closeness_factor = 1.0 + (1.0 / (normalized_current + 0.2))
+        distance_reward = distance_improvement * 15.0 * closeness_factor
+        
+        # small continuous reward for being closer to target
+        proximity_reward = 0.2 * (1.0 - normalized_current)
+        
+        success_reward = 100.0 if self.success else 0.0
+        time_penalty = -0.05
+        
+        total_reward = distance_reward + proximity_reward + success_reward + time_penalty
+        
         return total_reward
 
     def _handle_collisions(self, dt):
