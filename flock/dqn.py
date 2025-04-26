@@ -1,7 +1,4 @@
-from collections import deque
-
 import numpy as np
-import random
 import torch
 
 
@@ -101,42 +98,3 @@ class DQN:
         self.optimizer.step()
 
         return loss.detach().cpu().data.numpy()
-
-
-class ReplayBuffer:
-    """Simple replay buffer."""
-
-    def __init__(self, max_len: int):
-        self.buffer = deque()
-        self.number = 0
-        self.max_len = max_len
-
-    def append(self, exp):
-        """Append experience to replay buffer.
-
-        Args:
-            exp: The experience to remove from the buffer.
-        """
-        self.buffer.append(exp)
-        self.number += 1
-
-    def pop(self):
-        """Remove oldest experience from replay buffer.
-
-        Raises:
-            IndexError: Error raised when buffer is already empty.
-        """
-        while self.number > self.max_len:
-            self.buffer.popleft()
-            self.number -= 1
-
-    def sample(self, batch_size: int) -> list:
-        """Sample a minibatch of experiences.
-
-        Args:
-            batch_size: Size of minibatch to sample.
-
-        Returns:
-            Minimatch of size min(batch_size, self.number).
-        """
-        return random.sample(self.buffer, min(batch_size, self.number))
