@@ -18,15 +18,17 @@ class ReplayBuffer:
         return len(self.buffer)
 
     def append(self, exp):
-        """Append experience to replay buffer.
+        """
+        Append experience to replay buffer.
 
         Args:
-            exp: The experience to remove from the buffer.
+            exp: The experience to add to the buffer.
         """
         self.buffer.append(exp)
 
     def sample(self, batch_size: int) -> tuple:
-        """Sample a minibatch of experiences.
+        """
+        Sample a minibatch of experiences.
 
         Args:
             batch_size: Size of minibatch to sample.
@@ -84,7 +86,7 @@ class SharedActor(nn.Module):
             state (torch.Tensor): Batch of local observations.
 
         Returns:
-            torch.Tensor: 
+            torch.Tensor:
         """
         # TODO: validate input shapes
         return self.model(state)
@@ -173,8 +175,8 @@ class SHMADDPG:
         self.tau = tau
         self.device = device
         
-        self.actor = SharedActor(self.agent_obs_dim, self.agent_act_dim).to(device)
-        self.critic = CentralCritic(self.total_obs_dim, self.total_act_dim).to(device)
+        self.actor = SharedActor(self.agent_obs_dim, self.agent_act_dim, hidden_dim=64, lr=1e-4).to(device)
+        self.critic = CentralCritic(self.total_obs_dim, self.total_act_dim, hidden_dim=128, lr=1e-3).to(device)
 
         self.actor_target = copy.deepcopy(self.actor).to(device)
         self.critic_target = copy.deepcopy(self.critic).to(device)
@@ -192,7 +194,7 @@ class SHMADDPG:
         Select actions given agent states.
             
         Args:
-            local_state (np.ndarray): Local states of agents, (n_agents, self.local_obs_dim).
+            local_state (np.ndarray): Local states of agents, (n_agents * self.local_obs_dim).
             global_state (np.ndarray): Global states, (self.global_obs_dim)
 
         Returns:
@@ -203,7 +205,9 @@ class SHMADDPG:
 
         with torch.no_grad():
             for i in range(self.n_agents):
-                agent_obs_tensor = torch.tensor(np.concat((local_state[i], global_state)), dtype=torch.float32).unsqueeze(0).to(self.device)
+                start_idx = i * self.local_obs_dim
+                end_idx = (i + 1) * self.local_obs_dim
+                agent_obs_tensor = torch.tensor(np.concatenate((local_state[start_idx:end_idx], global_state), axis=0), dtype=torch.float32).unsqueeze(0).to(self.device)
                 action = self.actor(agent_obs_tensor).squeeze(0).cpu().numpy()
 
                 if explore:
@@ -276,15 +280,53 @@ class SHMADDPG:
         self.soft_update(self.critic_target, self.critic, self.tau)
         self.soft_update(self.actor_target, self.actor, self.tau)
 
-
     def soft_update(self, target_net, source_net, tau):
         """ Helper function for Polyak averaging. """
         for target_param, source_param in zip(target_net.parameters(), source_net.parameters()):
             target_param.data.copy_(tau * source_param.data + (1.0 - tau) * target_param.data)
 
-def train():
-    pass
 
+def train_SHMADDPG(
+        env,
+        agent: SHMADDPG,
+        num_episodes,
+        max_ep_len,
+        batch_size,
+        noise_stddev_start,
+        noise_stddev_end,
+        noise_decay_steps
+    ):
+    total_steps = 0
+    noise_stddev = noise_stddev_start
 
-if __name__ == "__main__":
-    pass
+    for episode in range(num_episodes):
+        obs = env.reset()
+        episode_reward = 0
+
+        for _ in range(max_ep_len):
+            total_steps += 1
+
+            # Decay noise
+            if total_steps < noise_decay_steps:
+                noise_stddev = noise_stddev_start - (noise_stddev_start - noise_stddev_end) * (total_steps / noise_decay_steps)
+            else:
+                noise_stddev = noise_stddev_end
+
+            action = agent.select_actions(obs[:-agent.global_obs_dim], obs[-agent.global_obs_dim:], noise_stddev=noise_stddev, explore=True)
+            
+            next_obs, r, done, _ = env.step(action)
+
+            flat_action = action.flatten()
+
+            agent.replay_buffer.append((obs, flat_action, r, next_obs, float(done)))
+
+            obs = next_obs
+            episode_reward += r
+
+            # Perform updates
+            agent.update(batch_size)
+
+            if done:
+                break
+
+        print(f"Episode {episode + 1}: Reward = {episode_reward:.2f}, Steps = {total_steps}, Noise = {noise_stddev:.3f}")
