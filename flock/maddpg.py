@@ -1,5 +1,6 @@
 import collections
 import copy
+import os
 import random
 
 import numpy as np
@@ -285,16 +286,45 @@ class SHMADDPG:
         for target_param, source_param in zip(target_net.parameters(), source_net.parameters()):
             target_param.data.copy_(tau * source_param.data + (1.0 - tau) * target_param.data)
 
+    def save_models(self, directory: str = ".", prefix: str = "shmaddpg"):
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+        actor_path = os.path.join(directory, f"{prefix}_actor.pth")
+        critic_path = os.path.join(directory, f"{prefix}_critic.pth")
+
+        torch.save(self.actor.state_dict(), actor_path)
+        torch.save(self.critic.state_dict(), critic_path)
+
+    def save_checkpoint(self, directory: str = ".", prefix: str = "shmaddpg_checkpoint", episode = None):
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+        file_name = f"{prefix}_{episode}.pth" if episode is not None else f"{prefix}.pth"
+        file_path = os.path.join(directory, file_name)
+
+        checkpoint = {
+            "actor_state_dict": self.actor.state_dict(),
+            "actor_target_state_dict": self.actor_target.state_dict(),
+            "actor_optimizer_state_dict": self.actor.optimizer.state_dict(),
+            "critic_state_dict": self.critic.state_dict(),
+            "critic_target_state_dict": self.critic_target.state_dict(),
+            "critic_optimizer_state_dict": self.critic.optimizer.state_dict(),
+        }
+
+        torch.save(checkpoint, file_path)
+
 
 def train_SHMADDPG(
         env,
         agent: SHMADDPG,
-        num_episodes,
-        max_ep_len,
-        batch_size,
-        noise_stddev_start,
-        noise_stddev_end,
-        noise_decay_steps
+        num_episodes: int,
+        max_ep_len: int,
+        batch_size: int,
+        noise_stddev_start: float,
+        noise_stddev_end: float,
+        noise_decay_steps: int,
+        update_freq: int = 100,
     ):
     total_steps = 0
     noise_stddev = noise_stddev_start
@@ -324,7 +354,8 @@ def train_SHMADDPG(
             episode_reward += r
 
             # Perform updates
-            agent.update(batch_size)
+            if total_steps % update_freq == 0:
+                agent.update(batch_size)
 
             if done:
                 break
