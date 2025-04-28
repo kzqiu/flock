@@ -154,6 +154,9 @@ class SHMADDPG:
         gamma: float,
         tau: float,
         buffer_size: int,
+        policy_update_freq: int = 2,
+        target_noise_stddev: float = 0.2,
+        noise_clip: float = 0.5,
         device: torch.device = torch.device("cpu"),
     ):
         """
@@ -179,17 +182,26 @@ class SHMADDPG:
         self.gamma = gamma
         self.tau = tau
         self.device = device
+        self.policy_update_freq = policy_update_freq
+        self._update_counter = 0
+        self.target_noise_stddev = target_noise_stddev
+        self.noise_clip = noise_clip
         
         self.actor = SharedActor(self.agent_obs_dim, self.agent_act_dim, hidden_dim=256, lr=3e-4).to(device)
-        self.critic = CentralCritic(self.total_obs_dim, self.total_act_dim, hidden_dim=256, lr=1e-3).to(device)
+        self.critic_1 = CentralCritic(self.total_obs_dim, self.total_act_dim, hidden_dim=256, lr=1e-3).to(device)
+        self.critic_2 = CentralCritic(self.total_obs_dim, self.total_act_dim, hidden_dim=256, lr=1e-3).to(device)
 
         self.actor_target = copy.deepcopy(self.actor).to(device)
-        self.critic_target = copy.deepcopy(self.critic).to(device)
+        self.critic_1_target = copy.deepcopy(self.critic_1).to(device)
+        self.critic_2_target = copy.deepcopy(self.critic_2).to(device)
 
         for p in self.actor_target.parameters():
             p.requires_grad = False
 
-        for p in self.critic_target.parameters():
+        for p in self.critic_1_target.parameters():
+            p.requires_grad = False
+
+        for p in self.critic_2_target.parameters():
             p.requires_grad = False
 
         self.replay_buffer = ReplayBuffer(buffer_size)
@@ -236,6 +248,8 @@ class SHMADDPG:
         if len(self.replay_buffer) < batch_size:
             return
 
+        self._update_counter += 1
+
         obs, act, r, next_obs, done = self.replay_buffer.sample(batch_size)
 
         obs = obs.to(self.device)
@@ -255,41 +269,54 @@ class SHMADDPG:
                 local_next_obs = next_obs[:, start_idx:end_idx]
                 total_next_obs = torch.cat((local_next_obs, global_next_obs), dim=1)
                 next_action_i = self.actor_target(total_next_obs)
-                next_actions.append(next_action_i)
+                action_noise = (torch.randn_like(next_action_i) * self.target_noise_stddev).clamp(-self.noise_clip, self.noise_clip)
+                smoothed_next_action_i = (next_action_i + action_noise).clamp(-1.0, 1.0)
+                next_actions.append(smoothed_next_action_i)
 
             next_action_tensor = torch.cat(next_actions, dim=1)
-            target_q_vals = self.critic_target(next_obs, next_action_tensor)
-            target_q = r + self.gamma * target_q_vals * (1.0 - done)
+            target_q1_vals = self.critic_1_target(next_obs, next_action_tensor)
+            target_q2_vals = self.critic_2_target(next_obs, next_action_tensor)
+            target_q_min = torch.min(target_q1_vals, target_q2_vals)
+            target_q = r + self.gamma * target_q_min * (1.0 - done)
 
-        curr_q = self.critic(obs, act)
-        critic_loss = torch.nn.functional.mse_loss(curr_q, target_q)
-        self.critic.optimizer.zero_grad()
-        critic_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0) # optional
-        self.critic.optimizer.step()
+        curr_q1 = self.critic_1(obs, act)
+        critic_1_loss = torch.nn.functional.mse_loss(curr_q1, target_q)
+        self.critic_1.optimizer.zero_grad()
+        critic_1_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.critic_1.parameters(), max_norm=1.0) # optional
+        self.critic_1.optimizer.step()
+
+        curr_q2 = self.critic_2(obs, act)
+        critic_2_loss = torch.nn.functional.mse_loss(curr_q2, target_q)
+        self.critic_2.optimizer.zero_grad()
+        critic_2_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.critic_2.parameters(), max_norm=1.0) # optional
+        self.critic_2.optimizer.step()
 
         # actor update
-        curr_actions = []
-        global_obs = obs[:, -self.global_obs_dim:]
+        if self._update_counter % self.policy_update_freq == 0:
+            curr_actions = []
+            global_obs = obs[:, -self.global_obs_dim:]
         
-        for i in range(self.n_agents):
-            start_idx = i * self.local_obs_dim
-            end_idx = (i + 1) * self.local_obs_dim
-            local_obs = obs[:, start_idx:end_idx]
-            total_obs = torch.cat((local_obs, global_obs), dim=1)
-            curr_action_i = self.actor(total_obs)
-            curr_actions.append(curr_action_i)
+            for i in range(self.n_agents):
+                start_idx = i * self.local_obs_dim
+                end_idx = (i + 1) * self.local_obs_dim
+                local_obs = obs[:, start_idx:end_idx]
+                total_obs = torch.cat((local_obs, global_obs), dim=1)
+                curr_action_i = self.actor(total_obs)
+                curr_actions.append(curr_action_i)
 
-        curr_action_tensor = torch.cat(curr_actions, dim=1)
-        actor_loss = -self.critic(obs, curr_action_tensor).mean()
+            curr_action_tensor = torch.cat(curr_actions, dim=1)
+            actor_loss = -self.critic_1(obs, curr_action_tensor).mean()
 
-        self.actor.optimizer.zero_grad()
-        actor_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0) # optional
-        self.actor.optimizer.step()
+            self.actor.optimizer.zero_grad()
+            actor_loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0) # optional
+            self.actor.optimizer.step()
 
-        self.soft_update(self.critic_target, self.critic, self.tau)
-        self.soft_update(self.actor_target, self.actor, self.tau)
+            self.soft_update(self.critic_1_target, self.critic_1, self.tau)
+            self.soft_update(self.critic_2_target, self.critic_2, self.tau)
+            self.soft_update(self.actor_target, self.actor, self.tau)
 
     def soft_update(self, target_net, source_net, tau):
         """ Helper function for Polyak averaging. """
@@ -301,10 +328,12 @@ class SHMADDPG:
             os.makedirs(directory)
 
         actor_path = os.path.join(directory, f"{prefix}_actor.pth")
-        critic_path = os.path.join(directory, f"{prefix}_critic.pth")
+        critic_1_path = os.path.join(directory, f"{prefix}_critic_1.pth")
+        critic_2_path = os.path.join(directory, f"{prefix}_critic_2.pth")
 
         torch.save(self.actor.state_dict(), actor_path)
-        torch.save(self.critic.state_dict(), critic_path)
+        torch.save(self.critic_1.state_dict(), critic_1_path)
+        torch.save(self.critic_2.state_dict(), critic_2_path)
 
     def save_checkpoint(self, directory: str = ".", prefix: str = "shmaddpg_checkpoint", episode = None):
         if not os.path.exists(directory):
@@ -317,9 +346,12 @@ class SHMADDPG:
             "actor_state_dict": self.actor.state_dict(),
             "actor_target_state_dict": self.actor_target.state_dict(),
             "actor_optimizer_state_dict": self.actor.optimizer.state_dict(),
-            "critic_state_dict": self.critic.state_dict(),
-            "critic_target_state_dict": self.critic_target.state_dict(),
-            "critic_optimizer_state_dict": self.critic.optimizer.state_dict(),
+            "critic_1_state_dict": self.critic_1.state_dict(),
+            "critic_1_target_state_dict": self.critic_1_target.state_dict(),
+            "critic_1_optimizer_state_dict": self.critic_1.optimizer.state_dict(),
+            "critic_2_state_dict": self.critic_2.state_dict(),
+            "critic_2_target_state_dict": self.critic_2_target.state_dict(),
+            "critic_2_optimizer_state_dict": self.critic_2.optimizer.state_dict(),
         }
 
         torch.save(checkpoint, file_path)
@@ -335,7 +367,15 @@ def train_SHMADDPG(
         noise_stddev_end: float,
         noise_decay_steps: int,
         update_freq: int = 100,
+        explore_timesteps: int = 10000,
     ):
+    """
+    Train 
+
+    Args:
+        env (gymnasium.Env):
+        ...
+    """
     total_steps = 0
     noise_stddev = noise_stddev_start
 
@@ -352,7 +392,10 @@ def train_SHMADDPG(
             else:
                 noise_stddev = noise_stddev_end
 
-            action = agent.select_actions(obs[:-agent.global_obs_dim], obs[-agent.global_obs_dim:], noise_stddev=noise_stddev, explore=True)
+            if total_steps < explore_timesteps:
+                action = np.random.uniform(-1, 1, size=(agent.n_agents, agent.agent_act_dim))
+            else:
+                action = agent.select_actions(obs[:-agent.global_obs_dim], obs[-agent.global_obs_dim:], noise_stddev=noise_stddev, explore=True)
             
             next_obs, r, done, _ = env.step(action)
 
@@ -364,7 +407,7 @@ def train_SHMADDPG(
             episode_reward += r
 
             # Perform updates
-            if total_steps % update_freq == 0:
+            if total_steps >= explore_timesteps and total_steps % update_freq == 0:
                 agent.update(batch_size)
 
             if done:

@@ -18,11 +18,14 @@ if __name__ == "__main__":
         gamma=0.99,
         tau=0.005,
         buffer_size=int(1e6),
+        policy_update_freq=2,
+        target_noise_stddev=0.2,
+        noise_clip=0.5,
         device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
     )
 
-    episodes = 250
-    max_ep_len = 750
+    episodes = 125
+    max_ep_len = 1000
 
     print("Starting training...")
     train_SHMADDPG(
@@ -30,11 +33,12 @@ if __name__ == "__main__":
         agent,
         episodes,
         max_ep_len,
-        batch_size=1024,
+        batch_size=128,
         noise_stddev_start=0.6,
         noise_stddev_end=0.05,
         noise_decay_steps=episodes * max_ep_len,
-        update_freq=100,
+        update_freq=1,
+        explore_timesteps=25000,
     )
     print("Training finished...")
 

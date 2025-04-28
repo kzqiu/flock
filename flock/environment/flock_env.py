@@ -72,7 +72,7 @@ class FlockEnv(gym.Env):
         self.previous_distance = None  # for reward calculation
 
         # episode settings
-        self.max_episode_steps = 750
+        self.max_episode_steps = 1000
         self.current_step = 0
 
     def seed(self, seed=None):
