@@ -8,11 +8,6 @@ from flock.maddpg import SHMADDPG, train_SHMADDPG
 if __name__ == "__main__":
     n_agents = 2
     width, height = (300, 300)
-
-    def normalize_obs(obs: np.ndarray) -> np.ndarray:
-        # given input observation with shape (n_agents * 11 + 6,)
-        # assume that width and height are the same
-        return obs / (width / 2) - 1
     
     env = FlockEnv(n_agents, width, height, num_obstacles=0)
 
@@ -27,8 +22,8 @@ if __name__ == "__main__":
         device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
     )
 
-    episodes = 1000
-    max_ep_len = 500
+    episodes = 10
+    max_ep_len = 750
 
     print("Starting training...")
     train_SHMADDPG(
@@ -41,7 +36,6 @@ if __name__ == "__main__":
         noise_stddev_end=0.05,
         noise_decay_steps=episodes * max_ep_len,
         update_freq=100,
-        transform_obs=normalize_obs,
     )
     print("Training finished...")
 
@@ -49,7 +43,7 @@ if __name__ == "__main__":
     agent.save_models("./models")
 
     # sample simulation
-    obs = normalize_obs(env.reset())
+    obs = env.reset()
 
     info = {}
     total_reward = 0
@@ -57,10 +51,8 @@ if __name__ == "__main__":
 
     while not done:
         actions = agent.select_actions(obs[:-agent.global_obs_dim], obs[-agent.global_obs_dim:], explore=False)
-        next_obs, reward, done, info = env.step(actions)
+        obs, reward, done, info = env.step(actions)
         total_reward += reward
-
-        obs = normalize_obs(next_obs)
 
         env.render()
 

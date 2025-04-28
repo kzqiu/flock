@@ -180,8 +180,8 @@ class SHMADDPG:
         self.tau = tau
         self.device = device
         
-        self.actor = SharedActor(self.agent_obs_dim, self.agent_act_dim, hidden_dim=256, lr=3e-4).to(device)
-        self.critic = CentralCritic(self.total_obs_dim, self.total_act_dim, hidden_dim=256, lr=1e-3).to(device)
+        self.actor = SharedActor(self.agent_obs_dim, self.agent_act_dim, hidden_dim=128, lr=3e-4).to(device)
+        self.critic = CentralCritic(self.total_obs_dim, self.total_act_dim, hidden_dim=128, lr=1e-3).to(device)
 
         self.actor_target = copy.deepcopy(self.actor).to(device)
         self.critic_target = copy.deepcopy(self.critic).to(device)

@@ -10,11 +10,6 @@ from flock.maddpg import SHMADDPG
 if __name__ == "__main__":
     n_agents = 2
     width, height = (300, 300)
-
-    def normalize_obs(obs: np.ndarray) -> np.ndarray:
-        # given input observation with shape (n_agents * 11 + 6,)
-        # assume that width and height are the same
-        return obs / (width / 2) - 1
     
     env = FlockEnv(n_agents, width, height, num_obstacles=0)
 
@@ -40,10 +35,8 @@ if __name__ == "__main__":
 
     while not done:
         actions = agent.select_actions(obs[:-agent.global_obs_dim], obs[-agent.global_obs_dim:], explore=False)
-        next_obs, reward, done, info = env.step(actions)
+        obs, reward, done, info = env.step(actions)
         total_reward += reward
-
-        obs = normalize_obs(next_obs)
 
         env.render()
 

@@ -72,7 +72,7 @@ class FlockEnv(gym.Env):
         self.previous_distance = None  # for reward calculation
 
         # episode settings
-        self.max_episode_steps = 500
+        self.max_episode_steps = 750
         self.current_step = 0
 
     def seed(self, seed=None):
@@ -328,8 +328,8 @@ class FlockEnv(gym.Env):
         for agent in self.agents:
             # basic agent info (position and velocity)
             agent_obs = [
-                agent.position[0] / self.width,  # normalize positions
-                agent.position[1] / self.height,
+                2 * agent.position[0] / self.width - 1,  # normalize positions
+                2 * agent.position[1] / self.height - 1,
                 agent.velocity[0] / agent.max_speed,  # normalize velocities
                 agent.velocity[1] / agent.max_speed,
             ]
@@ -364,18 +364,18 @@ class FlockEnv(gym.Env):
                     [normalized_dist, dir_from_obstacle[0], dir_from_obstacle[1]]
                 )
             else:
-                agent_obs.extend([1.0, 0.0, 0.0])  # no obstacle detected
+                agent_obs.extend([0.0, 0.0, 0.0])  # no obstacle detected
 
             observations.extend(agent_obs)
 
         # add global information
         global_obs = [
-            self.transport_object.position[0] / self.width,
-            self.transport_object.position[1] / self.height,
+            2 * self.transport_object.position[0] / self.width - 1,
+            2 * self.transport_object.position[1] / self.height - 1,
             self.transport_object.velocity[0] / self.transport_object.max_speed,
             self.transport_object.velocity[1] / self.transport_object.max_speed,
-            self.target_pos[0] / self.width,
-            self.target_pos[1] / self.height,
+            2 * self.target_pos[0] / self.width - 1,
+            2 * self.target_pos[1] / self.height - 1,
         ]
 
         observations.extend(global_obs)
@@ -409,7 +409,8 @@ class FlockEnv(gym.Env):
         distance_reward = distance_improvement * 10.0 * closeness_factor
         
         # stronger continuous reward for being closer to target
-        proximity_reward = 0.5 * (1.0 - normalized_current)
+        # proximity_reward = 0.5 * (1.0 - normalized_current)
+        proximity_reward = 0
         
         # reward for agents being near the object
         agents_near_object = 0
@@ -424,7 +425,7 @@ class FlockEnv(gym.Env):
             engagement_factor = agents_near_object / len(self.agents)
             engagement_reward = 0.3 * engagement_factor
         
-        success_reward = 100.0 if self.success else 0.0
+        success_reward = 1000.0 if self.success else 0.0
         
         # reduced time penalty to encourage longer exploration
         time_penalty = -0.01
