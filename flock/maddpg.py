@@ -180,8 +180,8 @@ class SHMADDPG:
         self.tau = tau
         self.device = device
         
-        self.actor = SharedActor(self.agent_obs_dim, self.agent_act_dim, hidden_dim=128, lr=3e-4).to(device)
-        self.critic = CentralCritic(self.total_obs_dim, self.total_act_dim, hidden_dim=128, lr=1e-3).to(device)
+        self.actor = SharedActor(self.agent_obs_dim, self.agent_act_dim, hidden_dim=256, lr=3e-4).to(device)
+        self.critic = CentralCritic(self.total_obs_dim, self.total_act_dim, hidden_dim=256, lr=1e-3).to(device)
 
         self.actor_target = copy.deepcopy(self.actor).to(device)
         self.critic_target = copy.deepcopy(self.critic).to(device)
@@ -335,7 +335,6 @@ def train_SHMADDPG(
         noise_stddev_end: float,
         noise_decay_steps: int,
         update_freq: int = 100,
-        transform_obs = None,
     ):
     total_steps = 0
     noise_stddev = noise_stddev_start
@@ -343,10 +342,6 @@ def train_SHMADDPG(
     for episode in range(num_episodes):
         obs = env.reset()
         episode_reward = 0
-
-        # transform obs
-        if transform_obs is not None:
-            obs = transform_obs(obs)
 
         for _ in range(max_ep_len):
             total_steps += 1
@@ -362,9 +357,6 @@ def train_SHMADDPG(
             next_obs, r, done, _ = env.step(action)
 
             flat_action = action.flatten()
-
-            if transform_obs is not None:
-                next_obs = transform_obs(obs)
 
             agent.replay_buffer.append((obs, flat_action, r, next_obs, float(done)))
 
