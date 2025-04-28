@@ -1,8 +1,10 @@
+import os
+
 import numpy as np
 import torch
 
 from flock import FlockEnv
-from flock.maddpg import SHMADDPG, train_SHMADDPG
+from flock.maddpg import SHMADDPG
 
 
 if __name__ == "__main__":
@@ -27,29 +29,10 @@ if __name__ == "__main__":
         device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
     )
 
-    episodes = 1000
-    max_ep_len = 500
-
-    print("Starting training...")
-    train_SHMADDPG(
-        env,
-        agent,
-        episodes,
-        max_ep_len,
-        batch_size=1024,
-        noise_stddev_start=0.6,
-        noise_stddev_end=0.05,
-        noise_decay_steps=episodes * max_ep_len,
-        update_freq=100,
-        transform_obs=normalize_obs,
-    )
-    print("Training finished...")
-
-    # save model weights!
-    agent.save_models("./models")
-
-    # sample simulation
-    obs = normalize_obs(env.reset())
+    # only load actor
+    agent.actor.load_state_dict(torch.load(os.path.join("./models", "shmaddpg_actor.pth"), weights_only=True))
+    
+    obs = env.reset()
 
     info = {}
     total_reward = 0
@@ -77,3 +60,4 @@ if __name__ == "__main__":
     print(f"Success: {info['success']}")
 
     env.close()
+        

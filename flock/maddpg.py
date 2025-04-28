@@ -73,6 +73,8 @@ class SharedActor(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
             nn.Linear(hidden_dim, act_dim),
             nn.Tanh(),
         )
@@ -110,6 +112,8 @@ class CentralCritic(nn.Module):
         
         self.model = nn.Sequential(
             nn.Linear(obs_dim + act_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
@@ -176,8 +180,8 @@ class SHMADDPG:
         self.tau = tau
         self.device = device
         
-        self.actor = SharedActor(self.agent_obs_dim, self.agent_act_dim, hidden_dim=64, lr=1e-4).to(device)
-        self.critic = CentralCritic(self.total_obs_dim, self.total_act_dim, hidden_dim=128, lr=1e-3).to(device)
+        self.actor = SharedActor(self.agent_obs_dim, self.agent_act_dim, hidden_dim=256, lr=3e-4).to(device)
+        self.critic = CentralCritic(self.total_obs_dim, self.total_act_dim, hidden_dim=256, lr=1e-3).to(device)
 
         self.actor_target = copy.deepcopy(self.actor).to(device)
         self.critic_target = copy.deepcopy(self.critic).to(device)
@@ -223,6 +227,12 @@ class SHMADDPG:
         return np.array(actions)
 
     def update(self, batch_size: int = 1):
+        """
+        Perform update step on actor and critic using replay examples.
+
+        Args:
+            batch_size (int): Number of examples to use.
+        """
         if len(self.replay_buffer) < batch_size:
             return
 
@@ -255,7 +265,7 @@ class SHMADDPG:
         critic_loss = torch.nn.functional.mse_loss(curr_q, target_q)
         self.critic.optimizer.zero_grad()
         critic_loss.backward()
-        # torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0) # optional
+        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=1.0) # optional
         self.critic.optimizer.step()
 
         # actor update
@@ -275,7 +285,7 @@ class SHMADDPG:
 
         self.actor.optimizer.zero_grad()
         actor_loss.backward()
-        # torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0) # optional
+        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=1.0) # optional
         self.actor.optimizer.step()
 
         self.soft_update(self.critic_target, self.critic, self.tau)
@@ -325,6 +335,7 @@ def train_SHMADDPG(
         noise_stddev_end: float,
         noise_decay_steps: int,
         update_freq: int = 100,
+        transform_obs = None,
     ):
     total_steps = 0
     noise_stddev = noise_stddev_start
@@ -332,6 +343,10 @@ def train_SHMADDPG(
     for episode in range(num_episodes):
         obs = env.reset()
         episode_reward = 0
+
+        # transform obs
+        if transform_obs is not None:
+            obs = transform_obs(obs)
 
         for _ in range(max_ep_len):
             total_steps += 1
@@ -347,6 +362,9 @@ def train_SHMADDPG(
             next_obs, r, done, _ = env.step(action)
 
             flat_action = action.flatten()
+
+            if transform_obs is not None:
+                next_obs = transform_obs(obs)
 
             agent.replay_buffer.append((obs, flat_action, r, next_obs, float(done)))
 
