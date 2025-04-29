@@ -1,10 +1,11 @@
 import numpy as np
 from environment.flock_env import FlockEnv
-
+from deterministic_controller import DeterministicController
 
 def main():
-    env = FlockEnv(num_agents=50, num_obstacles=15)
-
+    env = FlockEnv(num_agents=25, num_obstacles=15)
+    controller = DeterministicController(num_agents=env.num_agents)
+    
     # reset the environment to get initial observation
     observation = env.reset()
 
@@ -12,13 +13,10 @@ def main():
     total_reward = 0
 
     while not done:
-        # sample random actions for all agents
-        actions = np.random.uniform(-1, 1, size=(env.num_agents, 2))
-
+        # get actions from controller
+        actions = controller.get_actions(observation, env)
         observation, reward, done, info = env.step(actions)
-
         total_reward += reward
-
         env.render()
 
         # check if user requested exit
@@ -33,9 +31,7 @@ def main():
 
     print(f"Episode done. Total reward: {total_reward:.2f}")
     print(f"Success: {info['success']}")
-
     env.close()
-
-
+    
 if __name__ == "__main__":
     main()
