@@ -5,7 +5,7 @@ from flock.maddpg import SHMADDPG, train_SHMADDPG
 
 
 if __name__ == "__main__":
-    n_agents = 2
+    n_agents = 3
     width, height = (300, 300)
     
     env = FlockEnv(n_agents, width, height, num_obstacles=0)
@@ -21,10 +21,10 @@ if __name__ == "__main__":
         policy_update_freq=2,
         target_noise_stddev=0.2,
         noise_clip=0.5,
-        device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     )
 
-    episodes = 125
+    episodes = 75
     max_ep_len = 1000
 
     print("Starting training...")
@@ -34,7 +34,7 @@ if __name__ == "__main__":
         episodes,
         max_ep_len,
         batch_size=128,
-        noise_stddev_start=0.6,
+        noise_stddev_start=0.5,
         noise_stddev_end=0.05,
         noise_decay_steps=episodes * max_ep_len,
         update_freq=1,

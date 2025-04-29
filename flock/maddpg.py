@@ -388,7 +388,7 @@ def train_SHMADDPG(
 
             # Decay noise
             if total_steps < noise_decay_steps:
-                noise_stddev = noise_stddev_start - (noise_stddev_start - noise_stddev_end) * (total_steps / noise_decay_steps)
+                noise_stddev = noise_stddev_start - (noise_stddev_start - noise_stddev_end) * ((total_steps - explore_timesteps) / noise_decay_steps)
             else:
                 noise_stddev = noise_stddev_end
 

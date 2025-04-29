@@ -7,7 +7,7 @@ from flock.maddpg import SHMADDPG
 
 
 if __name__ == "__main__":
-    n_agents = 2
+    n_agents = 3
     width, height = (300, 300)
     
     env = FlockEnv(n_agents, width, height, num_obstacles=0)
@@ -20,7 +20,7 @@ if __name__ == "__main__":
         gamma=0.99,
         tau=0.005,
         buffer_size=int(1e6),
-        device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     )
 
     # only load actor
