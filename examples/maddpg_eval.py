@@ -7,7 +7,7 @@ from flock.maddpg import SHMADDPG
 
 
 if __name__ == "__main__":
-    n_agents = 3
+    n_agents = 4
     width, height = (300, 300)
     
     env = FlockEnv(n_agents, width, height, num_obstacles=0)

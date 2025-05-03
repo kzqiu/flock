@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 
 from flock import FlockEnv
@@ -5,7 +6,7 @@ from flock.maddpg import SHMADDPG, train_SHMADDPG
 
 
 if __name__ == "__main__":
-    n_agents = 3
+    n_agents = 16
     width, height = (300, 300)
     
     env = FlockEnv(n_agents, width, height, num_obstacles=0)
@@ -24,11 +25,11 @@ if __name__ == "__main__":
         device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
     )
 
-    episodes = 75
+    episodes = 125
     max_ep_len = 1000
 
     print("Starting training...")
-    train_SHMADDPG(
+    eval_rewards = train_SHMADDPG(
         env,
         agent,
         episodes,
@@ -44,6 +45,7 @@ if __name__ == "__main__":
 
     # save model weights!
     agent.save_models("./models")
+    np.save("./models/eval_reward.npy", eval_rewards)
 
     # sample simulation
     obs = env.reset()

@@ -378,6 +378,7 @@ def train_SHMADDPG(
     """
     total_steps = 0
     noise_stddev = noise_stddev_start
+    eval_rewards = []
 
     for episode in range(num_episodes):
         obs = env.reset()
@@ -414,3 +415,22 @@ def train_SHMADDPG(
                 break
 
         print(f"Episode {episode + 1}: Reward = {episode_reward:.2f}, Steps = {total_steps}, Noise = {noise_stddev:.3f}")
+
+        obs = env.reset()
+        eval_reward = 0
+
+        while True:
+            if total_steps < explore_timesteps:
+                break
+
+            action = agent.select_actions(obs[:-agent.global_obs_dim], obs[-agent.global_obs_dim:], explore=False)
+
+            next_obs, r, done, _ = env.step(action)
+            obs = next_obs
+            eval_reward += r
+
+            if done:
+                eval_rewards.append(eval_reward)
+                break
+
+    return np.array(eval_rewards)
